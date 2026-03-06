@@ -35,3 +35,6 @@ chroma_data/
 MEMORY.md
 CLAUDE.md
 PRD.md
+
+# Local Netlify folder
+.netlify

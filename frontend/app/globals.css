@@ -73,6 +73,15 @@ html.dark .card {
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
+html.dark .prose {
+  --tw-prose-body: var(--color-charcoal);
+  --tw-prose-headings: var(--color-deep);
+  --tw-prose-bold: var(--color-deep);
+  --tw-prose-links: var(--color-coral);
+  --tw-prose-bullets: var(--color-charcoal);
+  --tw-prose-counters: var(--color-charcoal);
+}
+
 html.dark ::-webkit-scrollbar-thumb { background: #3a3a48; }
 html.dark ::-webkit-scrollbar-thumb:hover { background: #4a4a58; }
 
