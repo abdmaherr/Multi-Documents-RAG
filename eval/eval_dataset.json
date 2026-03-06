@@ -1,0 +1,10 @@
+{
+  "description": "Evaluation dataset for retrieval quality. Upload the corresponding documents to the backend before running eval.py.",
+  "pairs": [
+    {
+      "question": "What is the main topic of the document?",
+      "expected_document": "your_document.pdf",
+      "expected_keywords": ["keyword1", "keyword2"]
+    }
+  ]
+}
