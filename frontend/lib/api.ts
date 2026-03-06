@@ -2,6 +2,15 @@ import type { DocumentInfo, DocumentSource, ProcessingEvent, SourceCitation } fr
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+function getDeviceId(): string {
+  let id = localStorage.getItem("device_id");
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("device_id", id);
+  }
+  return id;
+}
+
 // Parse raw SSE buffer into event blocks
 function* parseSSEBuffer(buffer: string): Generator<{ event: string; data: string }> {
   const blocks = buffer.split("\n\n");
@@ -22,13 +31,18 @@ function* parseSSEBuffer(buffer: string): Generator<{ event: string; data: strin
 }
 
 export async function listDocuments(): Promise<DocumentInfo[]> {
-  const res = await fetch(`${BASE}/documents/`);
+  const res = await fetch(`${BASE}/documents/`, {
+    headers: { "X-Device-ID": getDeviceId() },
+  });
   if (!res.ok) throw new Error("Failed to fetch documents");
   return res.json();
 }
 
 export async function deleteDocument(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/documents/${id}`, { method: "DELETE" });
+  const res = await fetch(`${BASE}/documents/${id}`, {
+    method: "DELETE",
+    headers: { "X-Device-ID": getDeviceId() },
+  });
   if (!res.ok) throw new Error("Failed to delete document");
 }
 
@@ -41,6 +55,7 @@ export async function uploadDocument(
 
   const res = await fetch(`${BASE}/documents/upload`, {
     method: "POST",
+    headers: { "X-Device-ID": getDeviceId() },
     body: formData,
   });
   if (!res.ok) {
@@ -90,7 +105,7 @@ export async function streamQuery(
 ): Promise<void> {
   const res = await fetch(`${BASE}/query/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Device-ID": getDeviceId() },
     body: JSON.stringify({ question, session_id: sessionId, n_results: nResults }),
   });
   if (!res.ok) throw new Error("Query failed");
@@ -131,7 +146,7 @@ export async function streamCompare(
 ): Promise<void> {
   const res = await fetch(`${BASE}/query/compare/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Device-ID": getDeviceId() },
     body: JSON.stringify({ question, doc_ids: docIds, n_results: nResults }),
   });
   if (!res.ok) throw new Error("Compare query failed");
@@ -163,6 +178,9 @@ export async function streamCompare(
 }
 
 export async function clearSession(sessionId: string): Promise<void> {
-  const res = await fetch(`${BASE}/query/session/${sessionId}`, { method: "DELETE" });
+  const res = await fetch(`${BASE}/query/session/${sessionId}`, {
+    method: "DELETE",
+    headers: { "X-Device-ID": getDeviceId() },
+  });
   if (!res.ok) throw new Error("Failed to clear session");
 }

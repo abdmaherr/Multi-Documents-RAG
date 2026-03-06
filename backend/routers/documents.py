@@ -3,7 +3,7 @@ import json
 import asyncio
 from pathlib import PurePosixPath
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, Header, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
 from db.chroma_client import delete_document, get_all_chunks
@@ -13,22 +13,22 @@ from services.retriever import invalidate_bm25_cache
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-# In-memory document registry (maps doc_id -> metadata)
-_documents: dict[str, dict] = {}
-_registry_loaded = False
+# Per-device document registry: device_id -> {doc_id -> metadata}
+_devices: dict[str, dict[str, dict]] = {}
+_loaded_devices: set[str] = set()
 _registry_lock = asyncio.Lock()
 
 
-def _rebuild_registry() -> None:
-    """Rebuild the document registry from ChromaDB on first access."""
-    global _registry_loaded
-    if _registry_loaded:
-        return
-    chunks = get_all_chunks()
+def _rebuild_registry(device_id: str) -> dict[str, dict]:
+    """Rebuild the document registry for a device from ChromaDB."""
+    if device_id in _loaded_devices:
+        return _devices.get(device_id, {})
+    docs: dict[str, dict] = {}
+    chunks = get_all_chunks(device_id=device_id)
     for chunk in chunks:
         doc_id = chunk["meta"]["doc_id"]
-        if doc_id not in _documents:
-            _documents[doc_id] = {
+        if doc_id not in docs:
+            docs[doc_id] = {
                 "id": doc_id,
                 "filename": chunk["meta"]["filename"],
                 "content_type": chunk["meta"].get("content_type", "unknown"),
@@ -36,36 +36,37 @@ def _rebuild_registry() -> None:
                 "status": "ready",
                 "file_hash": chunk["meta"].get("file_hash", ""),
             }
-        _documents[doc_id]["chunk_count"] += 1
-    _registry_loaded = True
+        docs[doc_id]["chunk_count"] += 1
+    _devices[device_id] = docs
+    _loaded_devices.add(device_id)
+    return docs
 
 
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
 @router.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
-    """Upload and ingest a document. Returns SSE stream of processing events."""
+async def upload_document(file: UploadFile = File(...), x_device_id: str = Header("")):
     content = await file.read()
     if len(content) > MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
 
     safe_filename = PurePosixPath(file.filename).name if file.filename else "unnamed"
     file_hash = hashlib.sha256(content).hexdigest()
+    device_id = x_device_id
 
     async with _registry_lock:
-        _rebuild_registry()
-    for doc in _documents.values():
+        docs = _rebuild_registry(device_id)
+    for doc in docs.values():
         if doc["filename"] == safe_filename or doc.get("file_hash") == file_hash:
             raise HTTPException(status_code=409, detail="File already uploaded.")
 
     async def event_stream():
-        doc_id = None
-        async for event in ingest_document(content, safe_filename, file.content_type):
+        async for event in ingest_document(content, safe_filename, file.content_type, device_id):
             if event.step == "complete" and event.status == "done":
-                doc_id = event.doc_id
-                _documents[doc_id] = {
-                    "id": doc_id,
+                dev_docs = _devices.setdefault(device_id, {})
+                dev_docs[event.doc_id] = {
+                    "id": event.doc_id,
                     "filename": safe_filename,
                     "content_type": file.content_type or "unknown",
                     "chunk_count": event.chunk_count or 0,
@@ -73,8 +74,6 @@ async def upload_document(file: UploadFile = File(...)):
                     "file_hash": file_hash,
                 }
                 invalidate_bm25_cache()
-            elif event.status == "error":
-                pass  # Don't register failed documents
 
             yield {
                 "event": event.step,
@@ -85,20 +84,20 @@ async def upload_document(file: UploadFile = File(...)):
 
 
 @router.get("/", response_model=list[DocumentInfo])
-async def list_documents():
+async def list_documents(x_device_id: str = Header("")):
     async with _registry_lock:
-        _rebuild_registry()
-    return [DocumentInfo(**doc) for doc in _documents.values()]
+        docs = _rebuild_registry(x_device_id)
+    return [DocumentInfo(**doc) for doc in docs.values()]
 
 
 @router.delete("/{doc_id}")
-async def delete_doc(doc_id: str):
+async def delete_doc(doc_id: str, x_device_id: str = Header("")):
     async with _registry_lock:
-        _rebuild_registry()
-    if doc_id not in _documents:
+        docs = _rebuild_registry(x_device_id)
+    if doc_id not in docs:
         raise HTTPException(status_code=404, detail="Document not found")
 
     delete_document(doc_id)
-    del _documents[doc_id]
+    del docs[doc_id]
     invalidate_bm25_cache()
     return {"status": "deleted", "doc_id": doc_id}

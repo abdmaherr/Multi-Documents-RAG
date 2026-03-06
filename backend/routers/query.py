@@ -2,7 +2,7 @@ import json
 import uuid
 from collections import OrderedDict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
 from models.schemas import CompareRequest, QueryRequest, QueryResponse
@@ -27,13 +27,12 @@ def _validate_question(question: str) -> None:
 
 
 @router.post("/", response_model=QueryResponse)
-async def query_documents(req: QueryRequest):
-    """Query documents and get a complete response with citations."""
+async def query_documents(req: QueryRequest, x_device_id: str = Header("")):
     _validate_question(req.question)
     session_id = req.session_id or str(uuid.uuid4())
     chat_history = _sessions.get(session_id, [])
 
-    citations, has_relevant = await retrieve_multi_query(req.question, n_results=req.n_results)
+    citations, has_relevant = await retrieve_multi_query(req.question, n_results=req.n_results, device_id=x_device_id)
 
     if not has_relevant or not citations:
         return QueryResponse(answer=NO_RELEVANT_MSG, citations=[], sources=[], session_id=session_id)
@@ -53,13 +52,12 @@ async def query_documents(req: QueryRequest):
 
 
 @router.post("/stream")
-async def query_documents_stream(req: QueryRequest):
-    """Query documents and stream the response via SSE."""
+async def query_documents_stream(req: QueryRequest, x_device_id: str = Header("")):
     _validate_question(req.question)
     session_id = req.session_id or str(uuid.uuid4())
     chat_history = _sessions.get(session_id, [])
 
-    citations, has_relevant = await retrieve_multi_query(req.question, n_results=req.n_results)
+    citations, has_relevant = await retrieve_multi_query(req.question, n_results=req.n_results, device_id=x_device_id)
 
     if not has_relevant or not citations:
         async def no_results_stream():
@@ -108,8 +106,7 @@ async def query_documents_stream(req: QueryRequest):
 
 
 @router.post("/compare/stream")
-async def compare_documents_stream(req: CompareRequest):
-    """Compare a question across specific documents, retrieving per-doc context."""
+async def compare_documents_stream(req: CompareRequest, x_device_id: str = Header("")):
     _validate_question(req.question)
     if len(req.doc_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 documents required for comparison")
@@ -118,7 +115,7 @@ async def compare_documents_stream(req: CompareRequest):
     all_citations = []
 
     for doc_id in req.doc_ids:
-        citations, _ = retrieve(req.question, n_results=req.n_results, doc_ids=[doc_id])
+        citations, _ = retrieve(req.question, n_results=req.n_results, doc_ids=[doc_id], device_id=x_device_id)
         if citations:
             doc_citations[citations[0].document] = citations
             all_citations.extend(citations)

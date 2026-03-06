@@ -13,30 +13,30 @@ CHUNK_RELEVANCE_THRESHOLD = 0.80  # Per-chunk filter: drop chunks with distance 
 ALPHA = 0.5  # vector weight
 BETA = 0.5   # BM25 weight
 
-# BM25 cache — invalidated whenever documents are mutated
-_bm25_index: BM25Okapi | None = None
-_bm25_corpus: list[dict] | None = None
-_bm25_corpus_by_id: dict[str, dict] | None = None
+# Per-device BM25 cache — invalidated whenever documents are mutated
+_bm25_cache: dict[str, tuple[BM25Okapi, list[dict], dict[str, dict]]] = {}
 _bm25_dirty = True
 
 
 def invalidate_bm25_cache() -> None:
     global _bm25_dirty
     _bm25_dirty = True
+    _bm25_cache.clear()
 
 
-def _get_bm25() -> tuple[BM25Okapi | None, list[dict], dict[str, dict]]:
-    global _bm25_index, _bm25_corpus, _bm25_corpus_by_id, _bm25_dirty
-    if _bm25_dirty or _bm25_index is None:
-        corpus = get_all_chunks()
-        if not corpus:
-            return None, [], {}
-        _bm25_corpus = corpus
-        _bm25_corpus_by_id = {c["id"]: c for c in corpus}
-        tokenized = [c["text"].lower().split() for c in corpus]
-        _bm25_index = BM25Okapi(tokenized)
-        _bm25_dirty = False
-    return _bm25_index, _bm25_corpus or [], _bm25_corpus_by_id or {}
+def _get_bm25(device_id: str = "") -> tuple[BM25Okapi | None, list[dict], dict[str, dict]]:
+    global _bm25_dirty
+    if not _bm25_dirty and device_id in _bm25_cache:
+        return _bm25_cache[device_id]
+    corpus = get_all_chunks(device_id=device_id)
+    if not corpus:
+        return None, [], {}
+    corpus_by_id = {c["id"]: c for c in corpus}
+    tokenized = [c["text"].lower().split() for c in corpus]
+    index = BM25Okapi(tokenized)
+    _bm25_cache[device_id] = (index, corpus, corpus_by_id)
+    _bm25_dirty = False
+    return index, corpus, corpus_by_id
 
 
 def _normalize_scores(scored: list[tuple[str, float]]) -> dict[str, float]:
@@ -72,18 +72,12 @@ def retrieve(
     question: str,
     n_results: int = 5,
     doc_ids: list[str] | None = None,
+    device_id: str = "",
 ) -> tuple[list[SourceCitation], bool]:
-    """Hybrid retrieve: vector + BM25 via weighted score combination.
-
-    final_score = α * norm_vector + β * norm_bm25
-
-    When doc_ids filter is active (compare mode), falls back to vector-only
-    because the BM25 index covers all documents.
-    """
     fetch_n = n_results * 2
 
     query_embedding = embed_query(question)
-    results = query_chunks(query_embedding, n_results=fetch_n, doc_ids=doc_ids)
+    results = query_chunks(query_embedding, n_results=fetch_n, doc_ids=doc_ids, device_id=device_id)
 
     if not results["documents"] or not results["documents"][0]:
         return [], False
@@ -100,10 +94,9 @@ def retrieve(
         chunk_map[cid] = {"text": doc_text, "meta": meta, "distance": dist}
         vector_scored.append((cid, 1 - dist))  # similarity = 1 - distance
 
-    # BM25 (skip when filtering by doc_ids — index spans all docs)
     bm25_scored: list[tuple[str, float]] = []
     if not doc_ids:
-        bm25_index, bm25_corpus, corpus_by_id = _get_bm25()
+        bm25_index, bm25_corpus, corpus_by_id = _get_bm25(device_id)
         if bm25_index and bm25_corpus:
             tokenized_q = question.lower().split()
             raw_scores = bm25_index.get_scores(tokenized_q)
@@ -187,11 +180,8 @@ def deduplicate_sources(
 async def retrieve_multi_query(
     question: str,
     n_results: int = 5,
+    device_id: str = "",
 ) -> tuple[list[SourceCitation], bool]:
-    """Multi-query retrieval: generate query variants, retrieve for each, merge.
-
-    Deduplicates by (document, chunk prefix) keeping the highest-scoring copy.
-    """
     from services.generator import generate_query_variants
 
     variants = await generate_query_variants(question)
@@ -199,7 +189,7 @@ async def retrieve_multi_query(
 
     loop = asyncio.get_event_loop()
     results = await asyncio.gather(
-        *(loop.run_in_executor(None, retrieve, q, n_results) for q in queries)
+        *(loop.run_in_executor(None, retrieve, q, n_results, None, device_id) for q in queries)
     )
 
     seen: dict[str, SourceCitation] = {}

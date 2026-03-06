@@ -28,11 +28,12 @@ def add_chunks(
     chunks: list[str],
     embeddings: list[list[float]],
     file_hash: str = "",
+    device_id: str = "",
 ) -> int:
     collection = get_collection()
     ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
     metadatas = [
-        {"doc_id": doc_id, "filename": filename, "chunk_index": i, "file_hash": file_hash}
+        {"doc_id": doc_id, "filename": filename, "chunk_index": i, "file_hash": file_hash, "device_id": device_id}
         for i in range(len(chunks))
     ]
 
@@ -49,9 +50,20 @@ def query_chunks(
     query_embedding: list[float],
     n_results: int = 5,
     doc_ids: list[str] | None = None,
+    device_id: str = "",
 ) -> dict:
     collection = get_collection()
-    where = {"doc_id": {"$in": doc_ids}} if doc_ids else None
+    conditions = []
+    if device_id:
+        conditions.append({"device_id": device_id})
+    if doc_ids:
+        conditions.append({"doc_id": {"$in": doc_ids}})
+    if len(conditions) > 1:
+        where = {"$and": conditions}
+    elif conditions:
+        where = conditions[0]
+    else:
+        where = None
     return collection.query(
         query_embeddings=[query_embedding],
         n_results=n_results,
@@ -81,10 +93,11 @@ def reset_collection() -> None:
     get_collection()
 
 
-def get_all_chunks() -> list[dict]:
-    """Return all chunks for BM25 index construction."""
+def get_all_chunks(device_id: str = "") -> list[dict]:
+    """Return chunks for BM25 index construction, filtered by device."""
     collection = get_collection()
-    result = collection.get(include=["documents", "metadatas"])
+    where = {"device_id": device_id} if device_id else None
+    result = collection.get(where=where, include=["documents", "metadatas"])
     if not result["ids"]:
         return []
     return [

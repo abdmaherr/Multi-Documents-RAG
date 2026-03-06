@@ -13,6 +13,7 @@ async def ingest_document(
     content: bytes,
     filename: str,
     content_type: str | None = None,
+    device_id: str = "",
 ) -> AsyncGenerator[ProcessingEvent, None]:
     """Ingest a document through the full pipeline, yielding progress events."""
     doc_id = str(uuid.uuid4())
@@ -47,7 +48,7 @@ async def ingest_document(
     # Step 4: Store
     yield ProcessingEvent(step="storing", status="started", detail="Saving to ChromaDB")
     try:
-        count = add_chunks(doc_id, filename, chunks, embeddings, file_hash)
+        count = add_chunks(doc_id, filename, chunks, embeddings, file_hash, device_id)
     except Exception as e:
         yield ProcessingEvent(step="storing", status="error", detail=str(e))
         return
