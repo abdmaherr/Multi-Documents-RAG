@@ -3,7 +3,7 @@ import json
 import asyncio
 from pathlib import PurePosixPath
 
-from fastapi import APIRouter, UploadFile, File, Header, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Header, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
 from db.chroma_client import delete_document, get_all_chunks
@@ -12,6 +12,12 @@ from services.pipeline import ingest_document
 from services.retriever import invalidate_bm25_cache
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+def _require_device_id(x_device_id: str = Header("")) -> str:
+    if not x_device_id or not x_device_id.strip():
+        raise HTTPException(status_code=400, detail="X-Device-ID header is required")
+    return x_device_id.strip()
 
 # Per-device document registry: device_id -> {doc_id -> metadata}
 _devices: dict[str, dict[str, dict]] = {}
@@ -46,14 +52,13 @@ MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
 @router.post("/upload")
-async def upload_document(file: UploadFile = File(...), x_device_id: str = Header("")):
+async def upload_document(file: UploadFile = File(...), device_id: str = Depends(_require_device_id)):
     content = await file.read()
     if len(content) > MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
 
     safe_filename = PurePosixPath(file.filename).name if file.filename else "unnamed"
     file_hash = hashlib.sha256(content).hexdigest()
-    device_id = x_device_id
 
     async with _registry_lock:
         docs = _rebuild_registry(device_id)
@@ -84,20 +89,20 @@ async def upload_document(file: UploadFile = File(...), x_device_id: str = Heade
 
 
 @router.get("/", response_model=list[DocumentInfo])
-async def list_documents(x_device_id: str = Header("")):
+async def list_documents(device_id: str = Depends(_require_device_id)):
     async with _registry_lock:
-        docs = _rebuild_registry(x_device_id)
+        docs = _rebuild_registry(device_id)
     return [DocumentInfo(**doc) for doc in docs.values()]
 
 
 @router.delete("/{doc_id}")
-async def delete_doc(doc_id: str, x_device_id: str = Header("")):
+async def delete_doc(doc_id: str, device_id: str = Depends(_require_device_id)):
     async with _registry_lock:
-        docs = _rebuild_registry(x_device_id)
+        docs = _rebuild_registry(device_id)
     if doc_id not in docs:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    delete_document(doc_id)
+    delete_document(doc_id, device_id=device_id)
     del docs[doc_id]
     invalidate_bm25_cache()
     return {"status": "deleted", "doc_id": doc_id}

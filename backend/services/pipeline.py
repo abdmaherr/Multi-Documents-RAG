@@ -23,8 +23,8 @@ async def ingest_document(
     yield ProcessingEvent(step="parsing", status="started", detail=f"Parsing {filename}")
     try:
         text = parse_document(content, filename, content_type)
-    except ValueError as e:
-        yield ProcessingEvent(step="parsing", status="error", detail=str(e))
+    except ValueError:
+        yield ProcessingEvent(step="parsing", status="error", detail="Failed to parse document. Check the file format.")
         return
     yield ProcessingEvent(step="parsing", status="done", detail=f"Extracted {len(text)} characters")
 
@@ -40,8 +40,8 @@ async def ingest_document(
     yield ProcessingEvent(step="embedding", status="started", detail=f"Embedding {len(chunks)} chunks")
     try:
         embeddings = embed_texts(chunks)
-    except Exception as e:
-        yield ProcessingEvent(step="embedding", status="error", detail=str(e))
+    except Exception:
+        yield ProcessingEvent(step="embedding", status="error", detail="Embedding failed. Please try again.")
         return
     yield ProcessingEvent(step="embedding", status="done", detail="Embeddings computed")
 
@@ -49,8 +49,8 @@ async def ingest_document(
     yield ProcessingEvent(step="storing", status="started", detail="Saving to ChromaDB")
     try:
         count = add_chunks(doc_id, filename, chunks, embeddings, file_hash, device_id)
-    except Exception as e:
-        yield ProcessingEvent(step="storing", status="error", detail=str(e))
+    except Exception:
+        yield ProcessingEvent(step="storing", status="error", detail="Failed to store document. Please try again.")
         return
     yield ProcessingEvent(step="storing", status="done", detail=f"Stored {count} chunks")
 

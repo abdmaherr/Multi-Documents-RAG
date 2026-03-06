@@ -39,27 +39,26 @@ CRITICAL FORMATTING RULES — you MUST follow these exactly:
 
 You MUST format your response EXACTLY like this example (notice the line breaks):
 
-Abdelrahman Abu Ghazaleh is a Jordanian individual born on **20/09/2002**.
+John Smith is a software engineer based in **New York**.
 
 **Contact Information**
 
-* Phone: (+962) 779315998
-* Email: abdulrahmanmaherag@gmail.com
+* Phone: (+1) 555-0100
+* Email: john.smith@example.com
 
 **Education**
 
-* **Bachelor of Science in Data Science**
-  Al-Balqaa Applied University
-  Duration: 10/09/2020 – 12/06/2024
+* **Bachelor of Science in Computer Science**
+  Example University
+  Duration: 09/2018 – 06/2022
 
-**Relevant Coursework**
+**Key Skills**
 
 * Machine Learning
 * Data Analysis
-* Data Visualization
-* Data Cleaning
+* Cloud Architecture
 
-Source: CV.pdf"""
+Source: resume.pdf"""
 
 NO_ANSWER_PROMPT = """The retrieved document chunks don't appear to be relevant to the user's question.
 Tell the user honestly that you couldn't find relevant information in their documents.

@@ -51,6 +51,7 @@ def query_chunks(
     n_results: int = 5,
     doc_ids: list[str] | None = None,
     device_id: str = "",
+    metadata_filter: dict | None = None,
 ) -> dict:
     collection = get_collection()
     conditions = []
@@ -58,6 +59,8 @@ def query_chunks(
         conditions.append({"device_id": device_id})
     if doc_ids:
         conditions.append({"doc_id": {"$in": doc_ids}})
+    if metadata_filter:
+        conditions.append(metadata_filter)
     if len(conditions) > 1:
         where = {"$and": conditions}
     elif conditions:
@@ -72,9 +75,13 @@ def query_chunks(
     )
 
 
-def delete_document(doc_id: str) -> None:
+def delete_document(doc_id: str, device_id: str = "") -> None:
     collection = get_collection()
-    collection.delete(where={"doc_id": doc_id})
+    conditions = [{"doc_id": doc_id}]
+    if device_id:
+        conditions.append({"device_id": device_id})
+    where = {"$and": conditions} if len(conditions) > 1 else conditions[0]
+    collection.delete(where=where)
 
 
 def get_document_count(doc_id: str) -> int:

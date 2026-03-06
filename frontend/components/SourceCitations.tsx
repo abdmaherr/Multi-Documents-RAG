@@ -34,6 +34,9 @@ export default function SourceCitations({ sources }: Props) {
 
   if (sources.length === 0) return null;
 
+  const maxScore = Math.max(...sources.map((s) => s.score), 0.001);
+  const pct = (score: number) => Math.round((score / maxScore) * 100);
+
   return (
     <div className="mt-2 space-y-1.5">
       <p className="text-[11px] font-semibold text-charcoal/40 uppercase tracking-[0.12em] mb-1.5">
@@ -72,7 +75,7 @@ export default function SourceCitations({ sources }: Props) {
 
             {/* Score + chunk count badge */}
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-warm-white text-charcoal/50 shrink-0">
-              {s.score.toFixed(2)}
+              {pct(s.score)}%
             </span>
             <span className="text-[10px] text-charcoal/40 shrink-0">
               {(s.chunks?.length ?? 0)} chunk{(s.chunks?.length ?? 0) !== 1 ? "s" : ""}
@@ -115,7 +118,7 @@ export default function SourceCitations({ sources }: Props) {
 
                   {/* Chunk score */}
                   <span className="text-[10px] font-mono text-charcoal/40 shrink-0 mt-0.5">
-                    {chunk.score.toFixed(2)}
+                    {pct(chunk.score)}%
                   </span>
                 </div>
               ))}

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DocumentInfo(BaseModel):
@@ -9,10 +9,27 @@ class DocumentInfo(BaseModel):
     status: str
 
 
+ALLOWED_FILTER_KEYS = {"filename", "page", "section"}
+
+
 class QueryRequest(BaseModel):
-    question: str
+    question: str = Field(max_length=2000)
     session_id: str | None = None
-    n_results: int = 5
+    n_results: int = Field(default=5, ge=1, le=20)
+    metadata_filter: dict | None = None
+
+    def validated_metadata_filter(self) -> dict | None:
+        """Return metadata_filter with only allowed keys and safe value types."""
+        if not self.metadata_filter:
+            return None
+        safe = {}
+        for key, val in self.metadata_filter.items():
+            if key not in ALLOWED_FILTER_KEYS:
+                continue
+            if not isinstance(val, (str, int, float)):
+                continue
+            safe[key] = val
+        return safe or None
 
 
 class SourceCitation(BaseModel):
@@ -45,9 +62,9 @@ class QueryResponse(BaseModel):
 
 
 class CompareRequest(BaseModel):
-    question: str
-    doc_ids: list[str]
-    n_results: int = 3
+    question: str = Field(max_length=2000)
+    doc_ids: list[str] = Field(min_length=2, max_length=10)
+    n_results: int = Field(default=3, ge=1, le=20)
 
 
 class ProcessingEvent(BaseModel):
