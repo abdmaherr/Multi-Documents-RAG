@@ -3,7 +3,7 @@ import asyncio
 from rank_bm25 import BM25Okapi
 
 from db.chroma_client import query_chunks, get_all_chunks
-from models.schemas import SourceCitation
+from models.schemas import DocumentSource, SourceChunk, SourceCitation
 from services.embedder import embed_query
 
 NO_ANSWER_THRESHOLD = 0.85  # ChromaDB cosine distance: lower = more similar
@@ -147,6 +147,41 @@ def retrieve(
 
     has_relevant = best_distance < NO_ANSWER_THRESHOLD
     return citations, has_relevant
+
+
+def deduplicate_sources(
+    citations: list[SourceCitation],
+    max_sources: int = 5,
+) -> list[DocumentSource]:
+    """Group chunk-level citations into unique document sources with all chunks."""
+    doc_map: dict[str, dict] = {}
+    for c in citations:
+        if c.document not in doc_map:
+            doc_map[c.document] = {"pages": set(), "best_score": c.score, "chunks": []}
+        entry = doc_map[c.document]
+        if c.page is not None:
+            entry["pages"].add(c.page)
+        if c.score > entry["best_score"]:
+            entry["best_score"] = c.score
+        entry["chunks"].append(SourceChunk(
+            text=c.chunk_text,
+            score=round(c.score, 4),
+            page=c.page,
+            section=c.section,
+        ))
+
+    sources = []
+    for doc_name, data in doc_map.items():
+        chunks_sorted = sorted(data["chunks"], key=lambda ch: ch.score, reverse=True)
+        sources.append(DocumentSource(
+            document=doc_name,
+            pages=sorted(data["pages"]),
+            score=round(data["best_score"], 4),
+            chunks=chunks_sorted,
+        ))
+
+    sources.sort(key=lambda s: s.score, reverse=True)
+    return sources[:max_sources]
 
 
 async def retrieve_multi_query(

@@ -153,8 +153,8 @@ export default function ChatPanel({
                     )}
                   </div>
 
-                  {msg.role === "assistant" && msg.citations && msg.citations.length > 0 && !msg.streaming && (
-                    <SourceCitations citations={msg.citations} />
+                  {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && !msg.streaming && (
+                    <SourceCitations sources={msg.sources} />
                   )}
                 </div>
               </div>

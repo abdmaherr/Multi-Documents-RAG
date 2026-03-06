@@ -23,9 +23,24 @@ class SourceCitation(BaseModel):
     section: str | None = None
 
 
+class SourceChunk(BaseModel):
+    text: str
+    score: float
+    page: int | None = None
+    section: str | None = None
+
+
+class DocumentSource(BaseModel):
+    document: str
+    pages: list[int]
+    score: float
+    chunks: list[SourceChunk]
+
+
 class QueryResponse(BaseModel):
     answer: str
     citations: list[SourceCitation]
+    sources: list[DocumentSource]
     session_id: str
 
 

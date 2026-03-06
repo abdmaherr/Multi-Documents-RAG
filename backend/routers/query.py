@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
 from models.schemas import CompareRequest, QueryRequest, QueryResponse
-from services.retriever import retrieve, retrieve_multi_query
+from services.retriever import deduplicate_sources, retrieve, retrieve_multi_query
 from services.generator import generate, generate_compare_stream, generate_stream
 
 router = APIRouter(prefix="/query", tags=["query"])
@@ -36,7 +36,7 @@ async def query_documents(req: QueryRequest):
     citations, has_relevant = await retrieve_multi_query(req.question, n_results=req.n_results)
 
     if not has_relevant or not citations:
-        return QueryResponse(answer=NO_RELEVANT_MSG, citations=[], session_id=session_id)
+        return QueryResponse(answer=NO_RELEVANT_MSG, citations=[], sources=[], session_id=session_id)
 
     answer = await generate(req.question, citations, has_relevant, chat_history)
 
@@ -48,7 +48,8 @@ async def query_documents(req: QueryRequest):
     if len(_sessions) > MAX_SESSIONS:
         _sessions.popitem(last=False)
 
-    return QueryResponse(answer=answer, citations=citations, session_id=session_id)
+    sources = deduplicate_sources(citations)
+    return QueryResponse(answer=answer, citations=citations, sources=sources, session_id=session_id)
 
 
 @router.post("/stream")
@@ -66,6 +67,7 @@ async def query_documents_stream(req: QueryRequest):
                 "event": "citations",
                 "data": json.dumps({
                     "citations": [],
+                    "sources": [],
                     "has_relevant": False,
                     "session_id": session_id,
                 }),
@@ -74,11 +76,14 @@ async def query_documents_stream(req: QueryRequest):
             yield {"event": "done", "data": json.dumps({"session_id": session_id})}
         return EventSourceResponse(no_results_stream())
 
+    sources = deduplicate_sources(citations)
+
     async def event_stream():
         yield {
             "event": "citations",
             "data": json.dumps({
                 "citations": [c.model_dump() for c in citations],
+                "sources": [s.model_dump() for s in sources],
                 "has_relevant": has_relevant,
                 "session_id": session_id,
             }),
@@ -118,11 +123,14 @@ async def compare_documents_stream(req: CompareRequest):
             doc_citations[citations[0].document] = citations
             all_citations.extend(citations)
 
+    sources = deduplicate_sources(all_citations)
+
     async def event_stream():
         yield {
             "event": "citations",
             "data": json.dumps({
                 "citations": [c.model_dump() for c in all_citations],
+                "sources": [s.model_dump() for s in sources],
                 "has_relevant": len(doc_citations) > 0,
                 "session_id": "",
             }),

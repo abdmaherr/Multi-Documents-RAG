@@ -1,4 +1,4 @@
-import type { DocumentInfo, ProcessingEvent, SourceCitation } from "./types";
+import type { DocumentInfo, DocumentSource, ProcessingEvent, SourceCitation } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -75,6 +75,7 @@ export async function uploadDocument(
 
 export interface CitationsPayload {
   citations: SourceCitation[];
+  sources: DocumentSource[];
   has_relevant: boolean;
   session_id: string;
 }

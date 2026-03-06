@@ -79,7 +79,7 @@ export default function Home() {
       id: assistantId,
       role: "assistant",
       content: "",
-      citations: [],
+      sources: [],
       streaming: true,
     };
 
@@ -90,10 +90,10 @@ export default function Home() {
       await streamQuery(
         question,
         sessionId,
-        ({ citations, session_id }) => {
+        ({ sources, session_id }) => {
           if (!sessionId) setSessionId(session_id);
           setMessages((prev) =>
-            prev.map((m) => (m.id === assistantId ? { ...m, citations } : m))
+            prev.map((m) => (m.id === assistantId ? { ...m, sources } : m))
           );
         },
         (token) => {
@@ -145,7 +145,7 @@ export default function Home() {
       id: assistantId,
       role: "assistant",
       content: "",
-      citations: [],
+      sources: [],
       streaming: true,
       isComparison: true,
     };
@@ -157,9 +157,9 @@ export default function Home() {
       await streamCompare(
         question,
         Array.from(selectedDocIds),
-        ({ citations }) => {
+        ({ sources }) => {
           setMessages((prev) =>
-            prev.map((m) => (m.id === assistantId ? { ...m, citations } : m))
+            prev.map((m) => (m.id === assistantId ? { ...m, sources } : m))
           );
         },
         (token) => {

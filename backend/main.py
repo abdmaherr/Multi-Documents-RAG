@@ -32,6 +32,11 @@ app.include_router(documents_router)
 app.include_router(query_router)
 
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "service": "Multi-Document RAG Pipeline"}
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}

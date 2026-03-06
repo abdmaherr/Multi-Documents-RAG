@@ -14,6 +14,20 @@ export interface SourceCitation {
   section: string | null;
 }
 
+export interface SourceChunk {
+  text: string;
+  score: number;
+  page: number | null;
+  section: string | null;
+}
+
+export interface DocumentSource {
+  document: string;
+  pages: number[];
+  score: number;
+  chunks: SourceChunk[];
+}
+
 export interface ProcessingEvent {
   step: string;
   status: string;
@@ -25,7 +39,7 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
-  citations?: SourceCitation[];
+  sources?: DocumentSource[];
   streaming?: boolean;
   isComparison?: boolean;
 }

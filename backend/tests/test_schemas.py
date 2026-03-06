@@ -94,17 +94,17 @@ class TestQueryResponse:
         return SourceCitation(document="doc.txt", chunk_text="chunk", score=0.9)
 
     def test_valid_response(self):
-        resp = QueryResponse(answer="42", citations=[self._citation()], session_id="sid-1")
+        resp = QueryResponse(answer="42", citations=[self._citation()], sources=[], session_id="sid-1")
         assert resp.answer == "42"
         assert len(resp.citations) == 1
 
     def test_empty_citations_allowed(self):
-        resp = QueryResponse(answer="No results.", citations=[], session_id="sid-2")
+        resp = QueryResponse(answer="No results.", citations=[], sources=[], session_id="sid-2")
         assert resp.citations == []
 
     def test_missing_session_id_raises(self):
         with pytest.raises(ValidationError):
-            QueryResponse(answer="A", citations=[])
+            QueryResponse(answer="A", citations=[], sources=[])
 
 
 # ---------------------------------------------------------------------------
